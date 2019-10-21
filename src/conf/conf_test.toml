@@ -1,0 +1,15 @@
+[database]
+dbHost = "127.0.0.1"
+dbPort = "3306"
+dbUser = "root"
+dbPass = "123456"
+dbName = "test"
+dbType = "mysql"
+binlogDbs = ["test"]
+binlogTbs = {"test.test"="t"}
+binlogDbHost = "127.0.0.1"
+binlogDbUser = "root"
+binlogDbPass = "123456"
+
+[tables]
+    [tables.copy]
