@@ -89,21 +89,23 @@ func UpdateSql(e *canal.RowsEvent) {
 			continue
 		}
 
-		if str == nil {
-			continue
-		}
-
 		if sets != "" {
 			sets += ","
 		}
 
 		var s = ""
-		if string(v.RawType) == "json" {
-			s = fmt.Sprintf("%s", str)
+		if str == nil {
+			s = "NULL"
+			sets += "`" + v.Name + "`" + "=" + s
 		} else {
-			s = ToStrings(str)
+			if string(v.RawType) == "json" {
+				s = fmt.Sprintf("%s", str)
+			} else {
+				s = ToStrings(str)
+			}
+			sets += "`" + v.Name + "`" + "=" + "'" + s + "'"
 		}
-		sets += "`" + v.Name + "`" + "=" + "'" + s + "'"
+
 	}
 	sql := "UPDATE " + conf.Config().Database.DbName + "." + e.Table.Name + " SET " + sets + " WHERE " + where
 	QuerySql(sql)
@@ -114,9 +116,6 @@ func InsetSql(e *canal.RowsEvent) {
 	var values = ""
 	for _, v := range e.Table.Columns {
 		str, _ := e.Table.GetColumnValue(v.Name, e.Rows[0])
-		if str == nil {
-			continue
-		}
 		if fields != "" {
 			fields += ","
 		}
@@ -125,13 +124,17 @@ func InsetSql(e *canal.RowsEvent) {
 			values += ","
 		}
 		var s = ""
-		if string(v.RawType) == "json" {
-			s = fmt.Sprintf("%s", str)
-		} else {
-			s = ToStrings(str)
+		if str == nil {
+			s = "NULL"
+			values += s
+		}else {
+			if string(v.RawType) == "json" {
+				s = fmt.Sprintf("%s", str)
+			} else {
+				s = ToStrings(str)
+			}
+			values += "'" + s + "'"
 		}
-		//s := InterfaceToStrings(e.Rows[0])
-		values += "'" + s + "'"
 	}
 	sql := "INSERT INTO " + conf.Config().Database.DbName + "." + e.Table.Name + " (" + fields + ")" + " VALUES " + "(" + values + ")"
 	QuerySql(sql)
@@ -160,7 +163,7 @@ func (h *BinlogHandler) OnTableChanged(schema string, table string) error {
 func BinlogListener() {
 	c, err := GetDefaultCanal()
 	if err != nil {
-		fmt.Println("%s\n", err.Error())
+		log.Error("GetDefaultCanal Error:", err.Error())
 	}
 	coords, err := c.GetMasterPos()
 	if err != nil {

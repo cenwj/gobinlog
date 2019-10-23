@@ -23,6 +23,5 @@ func Init() *sql.DB {
 	if err != nil {
 		log.Fatalln("db:" + err.Error())
 	}
-	fmt.Println(db)
 	return db
 }
