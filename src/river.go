@@ -36,16 +36,18 @@ func InitRiver(c *conf.C) (*River, error) {
 		return nil, err
 	}
 
-	//if err = r.canal.CheckBinlogRowImage("FULL"); err != nil {
-	//	return nil, err
-	//}
+	if err = r.newCanal(); err != nil {
+		return nil, err
+	}
 
-	log.Infof("InitRiver:%s\n", r)
+	if err = r.canal.CheckBinlogRowImage("FULL"); err != nil {
+		return nil, err
+	}
 
 	return r, nil
 }
 
-func (r *River) GetDefaultCanal() (*canal.Canal, error) {
+func (r *River) newCanal() error {
 	cfg := canal.NewDefaultConfig()
 	cfg.Addr = fmt.Sprintf("%s:%d", r.c.BinlogDbHost, 3306)
 	cfg.User = r.c.BinlogDbUser
@@ -54,11 +56,10 @@ func (r *River) GetDefaultCanal() (*canal.Canal, error) {
 	cfg.Dump.ExecutionPath = ""
 
 	var err error
-	c, err := canal.NewCanal(cfg)
-	//r.canal.SetEventHandler(&canal.DummyEventHandler{})
-	//c.SetEventHandler(&BinLogHandler{})
-	//r.canal.SetEventHandler(&EventHandler{r})
-	return c, err
+	r.canal, err = canal.NewCanal(cfg)
+	r.canal.SetEventHandler(&BinLogHandler{r: r})
+
+	return err
 }
 
 func (r *River) Run() error {
@@ -66,18 +67,12 @@ func (r *River) Run() error {
 	go r.syncPos()
 	go r.txLoop()
 
-	c, _ := r.GetDefaultCanal()
-	//pos := r.master.Position()
-	//log.Infof("Run pos:%v\n", pos)
-	c.SetEventHandler(&BinLogHandler{r:r})
-	pos, _ := c.GetMasterPos()
-	err := c.RunFrom(pos)
-	log.Infof("run canal Success12:%v,pos:%s\n", err, pos)
+	pos := r.master.Position()
+	err := r.canal.RunFrom(pos)
 	if err != nil {
 		log.Errorf("run canal Err:%s\n ", err.Error())
 		return err
 	}
-	log.Infof("run canal Successpos:%s\n", pos)
 	return nil
 }
 

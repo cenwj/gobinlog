@@ -26,6 +26,7 @@ type C struct {
 	BulkSize      int
 	FlushBulkTime TomlDuration
 	DataDir       string
+	StatAddr      string
 }
 
 type TomlDuration struct {

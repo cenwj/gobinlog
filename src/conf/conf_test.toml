@@ -13,6 +13,7 @@ binlogDbPass = "123456"
 bulkSize = 128
 flushBulkTime = "500ms"
 dataDir = "./var"
+statAddr = "127.0.0.1:11800"
 
 [tables]
     [tables.copy]

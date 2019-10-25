@@ -5,6 +5,7 @@ import (
 	"github.com/siddontang/go-log/log"
 	"github.com/siddontang/go-mysql/canal"
 	"github.com/siddontang/go-mysql/mysql"
+	"github.com/siddontang/go-mysql/replication"
 	"gobinlog/src/db"
 	"time"
 )
@@ -17,6 +18,27 @@ type posSave struct {
 type BinLogHandler struct {
 	*canal.DummyEventHandler
 	r *River
+}
+
+func (h *BinLogHandler) OnRotate(e *replication.RotateEvent) error {
+	pos := mysql.Position{
+		string(e.NextLogName),
+		uint32(e.Position),
+	}
+
+	h.r.posCh <- posSave{pos, true}
+
+	return h.r.ctx.Err()
+}
+
+func (h *BinLogHandler) OnDDL(nextPos mysql.Position, _ *replication.QueryEvent) error {
+	h.r.posCh <- posSave{nextPos, true}
+	return h.r.ctx.Err()
+}
+
+func (h *BinLogHandler) OnXID(nextPos mysql.Position) error {
+	h.r.posCh <- posSave{nextPos, false}
+	return h.r.ctx.Err()
 }
 
 func (h *BinLogHandler) OnRow(e *canal.RowsEvent) error {
@@ -176,6 +198,7 @@ func (r *River) DeleteSql(rows [][]interface{}) {
 
 func (r *River) UpdateSql(rows [][]interface{}) {
 	pkValue, _ := r.cEvent.Table.GetPKValues(rows[1])
+
 	pkLen := r.cEvent.Table.PKColumns
 
 	var where = ""
