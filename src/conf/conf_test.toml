@@ -1,4 +1,4 @@
-[database]
+[c]
 dbHost = "127.0.0.1"
 dbPort = "3306"
 dbUser = "root"
@@ -6,10 +6,13 @@ dbPass = "123456"
 dbName = "test"
 dbType = "mysql"
 binlogDbs = ["tiger"]
-binlogTbs = {"t.copy"="t","t.trade_account"="t"}
+binlogTbs = {"tiger.copy"="t","tiger.trade_account"="t"}
 binlogDbHost = "127.0.0.1"
 binlogDbUser = "root"
 binlogDbPass = "123456"
+bulkSize = 128
+flushBulkTime = "500ms"
+dataDir = "./var"
 
 [tables]
     [tables.copy]

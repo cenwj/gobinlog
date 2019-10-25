@@ -4,24 +4,32 @@ import (
 	"flag"
 	"github.com/BurntSushi/toml"
 	"sync"
+	"time"
 )
 
 type tomlConfig struct {
-	Database database
+	C C
 }
 
-type database struct {
-	DbHost       string
-	DbPort       string
-	DbUser       string
-	DbPass       string
-	DbName       string
-	DbType       string
-	BinlogDbHost string
-	BinlogDbUser string
-	BinlogDbPass string
-	BinlogTbs    map[string]string
-	BinlogDbs    []string
+type C struct {
+	DbHost        string
+	DbPort        string
+	DbUser        string
+	DbPass        string
+	DbName        string
+	DbType        string
+	BinlogDbHost  string
+	BinlogDbUser  string
+	BinlogDbPass  string
+	BinlogTbs     map[string]string
+	BinlogDbs     []string
+	BulkSize      int
+	FlushBulkTime TomlDuration
+	DataDir       string
+}
+
+type TomlDuration struct {
+	time.Duration
 }
 
 //读取环境变量
@@ -41,17 +49,11 @@ func Config() *tomlConfig {
 	return conf
 }
 
-func init(){
-	flag.StringVar(&confPath, "conf", "./src/conf/conf_test.toml", "default config path")
+func init() {
+	flag.StringVar(&confPath, "conf", "../conf/conf_test.toml", "default config path")
 }
 
 func Init() {
-
-	//filePath, err := filepath.Abs("./src/conf/conf.toml")
-	//if err != nil {
-	//	panic(err)
-	//}
-
 	config := new(tomlConfig)
 	if _, err := toml.DecodeFile(confPath, config); err != nil {
 		panic(err)
@@ -62,4 +64,8 @@ func Init() {
 	conf = config
 }
 
-
+func (d *TomlDuration) UnmarshalText(text []byte) error {
+	var err error
+	d.Duration, err = time.ParseDuration(string(text))
+	return err
+}

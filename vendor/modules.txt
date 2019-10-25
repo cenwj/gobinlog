@@ -8,16 +8,10 @@ github.com/golang/protobuf/proto
 github.com/jinzhu/gorm
 # github.com/jinzhu/inflection v1.0.0
 github.com/jinzhu/inflection
-# github.com/json-iterator/go v1.1.7
-github.com/json-iterator/go
 # github.com/juju/errors v0.0.0-20190930114154-d42613fe1ab9
 github.com/juju/errors
 # github.com/konsorten/go-windows-terminal-sequences v1.0.1
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421
-github.com/modern-go/concurrent
-# github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742
-github.com/modern-go/reflect2
 # github.com/pingcap/errors v0.11.0
 github.com/pingcap/errors
 # github.com/pingcap/parser v0.0.0-20190506092653-e336082eb825
@@ -39,17 +33,18 @@ github.com/satori/go.uuid
 # github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
 github.com/shopspring/decimal
 # github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
+github.com/siddontang/go/ioutil2
 github.com/siddontang/go/hack
 # github.com/siddontang/go-log v0.0.0-20180807004314-8d05993dda07
 github.com/siddontang/go-log/log
 github.com/siddontang/go-log/loggers
 # github.com/siddontang/go-mysql v0.0.0-20191014070946-e4fc33683f45
 github.com/siddontang/go-mysql/canal
-github.com/siddontang/go-mysql/schema
-github.com/siddontang/go-mysql/client
-github.com/siddontang/go-mysql/dump
 github.com/siddontang/go-mysql/mysql
 github.com/siddontang/go-mysql/replication
+github.com/siddontang/go-mysql/client
+github.com/siddontang/go-mysql/dump
+github.com/siddontang/go-mysql/schema
 github.com/siddontang/go-mysql/packet
 # github.com/sirupsen/logrus v1.4.1
 github.com/sirupsen/logrus
