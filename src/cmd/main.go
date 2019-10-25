@@ -21,7 +21,7 @@ func main() {
 		syscall.SIGQUIT)
 
 	conf.Init()
-	r, err := src.InitRiver(&conf.Config().C)
+	r, err := src.InitRiver(&conf.Conf().C)
 	if err != nil {
 		println(err.Error())
 		return

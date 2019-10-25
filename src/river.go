@@ -69,7 +69,7 @@ func (r *River) Run() error {
 	c, _ := r.GetDefaultCanal()
 	//pos := r.master.Position()
 	//log.Infof("Run pos:%v\n", pos)
-	c.SetEventHandler(&BinLogHandler{r})
+	c.SetEventHandler(&BinLogHandler{r:r})
 	pos, _ := c.GetMasterPos()
 	err := c.RunFrom(pos)
 	log.Infof("run canal Success12:%v,pos:%s\n", err, pos)

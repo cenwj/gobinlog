@@ -15,34 +15,36 @@ type posSave struct {
 }
 
 type BinLogHandler struct {
+	*canal.DummyEventHandler
 	r *River
 }
 
 func (h *BinLogHandler) OnRow(e *canal.RowsEvent) error {
-	//log.Infof("OnRow")
-	//defer func() {
-	//	if r := recover(); r != nil {
-	//		log.Errorf("recover error - %s\n", r)
-	//	}
-	//}()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("recover error - %s\n", r)
+		}
+	}()
 
-	//var mapTB = h.r.c.BinlogTbs
-	//var fTb = e.Table.Schema + "." + e.Table.Name
-	//_, ok := mapTB[fTb]
-	//if !ok {
-	//	return nil
-	//}
-	//log.Infof("mapTB:%v,FTB:%v\n", mapTB, fTb)
+	var mapTB = h.r.c.BinlogTbs
+	var fTb = e.Table.Schema + "." + e.Table.Name
+	_, ok := mapTB[fTb]
+	if !ok {
+		return nil
+	}
+
 	var res []byte
 
 	switch e.Action {
 	case canal.UpdateAction:
-		log.Infof("action:%s\n", e.Action)
 		h.r.syncCh <- e.Rows
+		h.r.cEvent = e
 	case canal.InsertAction:
 		h.r.syncCh <- e.Rows
+		h.r.cEvent = e
 	case canal.DeleteAction:
 		h.r.syncCh <- e.Rows
+		h.r.cEvent = e
 	default:
 		return nil
 	}
@@ -114,7 +116,6 @@ func (r *River) txLoop() {
 
 	chHandler := make(chan int, maxRoutineNum)
 
-	log.Infof("syncCh:%v\n", <-r.syncCh)
 	for {
 		select {
 		case v := <-r.syncCh:
@@ -136,14 +137,13 @@ func (r *River) txLoop() {
 }
 
 func (r *River) SyncData(row [][]interface{}, chHandler chan int) (err error) {
-	log.Infof("row:%v,action:%s", row, r.cEvent.Action)
 	switch r.cEvent.Action {
 	case canal.UpdateAction:
 		r.UpdateSql(row)
 	case canal.InsertAction:
-		r.DeleteSql(row)
-	case canal.DeleteAction:
 		r.InsetSql(row)
+	case canal.DeleteAction:
+		r.DeleteSql(row)
 	default:
 		return nil
 	}
@@ -166,7 +166,7 @@ func (r *River) DeleteSql(rows [][]interface{}) {
 
 		var r []interface{} = make([]interface{}, 1)
 		r[0] = pv[i]
-		s := ToStrings(r)
+		s := ToStrings(r[0])
 		where += "`" + pk + "`" + "=" + "'" + s + "'"
 	}
 
@@ -189,7 +189,7 @@ func (r *River) UpdateSql(rows [][]interface{}) {
 
 		var r []interface{} = make([]interface{}, 1)
 		r[0] = pkValue[i]
-		v := ToStrings(r)
+		v := ToStrings(r[0])
 		mr[pk] = pk
 		ret = append(ret, mr)
 		where += "`" + pk + "`" + "=" + "'" + string(v) + "'"

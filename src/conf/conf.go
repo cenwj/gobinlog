@@ -42,7 +42,7 @@ var confPath string
 如果接收到信号就重新加载配置。
 在Config方法中获取Conf的时候加了读锁，防止在读的时候，也在写入，导致配置错乱。
 */
-func Config() *tomlConfig {
+func Conf() *tomlConfig {
 	once.Do(Init)
 	confLock.RLock()
 	defer confLock.RUnlock()

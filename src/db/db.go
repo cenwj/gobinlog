@@ -13,11 +13,11 @@ var db *sql.DB
 func Init() *sql.DB {
 	confStr := fmt.Sprintf(
 		"%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=True&loc=Local",
-		conf.Config().C.DbUser,
-		conf.Config().C.DbPass,
-		conf.Config().C.DbHost,
-		conf.Config().C.DbPort,
-		conf.Config().C.DbName)
+		conf.Conf().C.DbUser,
+		conf.Conf().C.DbPass,
+		conf.Conf().C.DbHost,
+		conf.Conf().C.DbPort,
+		conf.Conf().C.DbName)
 	db, err := sql.Open("mysql", confStr)
 
 	if err != nil {
