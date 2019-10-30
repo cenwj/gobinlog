@@ -10,7 +10,6 @@ import (
 )
 
 type River struct {
-	*canal.DummyEventHandler
 	canal      *canal.Canal
 	cEvent     *canal.RowsEvent
 	c          *conf.C
@@ -54,20 +53,23 @@ func (r *River) newCanal() error {
 	cfg.Password = r.c.BinlogDbPass
 	cfg.Flavor = "mysql"
 	cfg.Dump.ExecutionPath = ""
-
+	cfg.ServerID = r.c.ServerID
+	cfg.Dump.DiscardErr = true
+	//cfg.SemiSyncEnabled = false
+	//cfg.Dump.SkipMasterData = false
 	var err error
 	r.canal, err = canal.NewCanal(cfg)
 	r.canal.SetEventHandler(&BinLogHandler{r: r})
-
 	return err
 }
 
 func (r *River) Run() error {
 	r.wg.Add(2)
-	go r.syncPos()
-	go r.txLoop()
+	go r.SyncPos()
+	go r.RowLoop()
 
 	pos := r.master.Position()
+	//err := r.canal.Run()
 	err := r.canal.RunFrom(pos)
 	if err != nil {
 		log.Errorf("run canal Err:%s\n ", err.Error())

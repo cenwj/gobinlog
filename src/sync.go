@@ -16,7 +16,7 @@ type posSave struct {
 }
 
 type BinLogHandler struct {
-	*canal.DummyEventHandler
+	canal.DummyEventHandler
 	r *River
 }
 
@@ -27,7 +27,6 @@ func (h *BinLogHandler) OnRotate(e *replication.RotateEvent) error {
 	}
 
 	h.r.posCh <- posSave{pos, true}
-
 	return h.r.ctx.Err()
 }
 
@@ -37,7 +36,12 @@ func (h *BinLogHandler) OnDDL(nextPos mysql.Position, _ *replication.QueryEvent)
 }
 
 func (h *BinLogHandler) OnXID(nextPos mysql.Position) error {
-	h.r.posCh <- posSave{nextPos, false}
+	h.r.posCh <- posSave{nextPos, true}
+	return h.r.ctx.Err()
+}
+
+func (h *BinLogHandler) OnPosSynced(p mysql.Position, set mysql.GTIDSet, f bool) error {
+	h.r.posCh <- posSave{p, true}
 	return h.r.ctx.Err()
 }
 
@@ -72,17 +76,20 @@ func (h *BinLogHandler) OnRow(e *canal.RowsEvent) error {
 	}
 
 	h.r.posCh <- res
-
 	return nil
 }
 
 func (h *BinLogHandler) OnTableChanged(schema string, table string) error { return nil }
 
+func (h *BinLogHandler) SyncedPosition() mysql.Position {
+	return h.r.master.Position()
+}
+
 func (h *BinLogHandler) String() string {
 	return "BinLogHandler"
 }
 
-func (r *River) syncPos() {
+func (r *River) SyncPos() {
 	bulkSize := r.c.BulkSize
 	if bulkSize == 0 {
 		bulkSize = 128
@@ -102,7 +109,7 @@ func (r *River) syncPos() {
 	var pos mysql.Position
 
 	for {
-		needSavePos := false
+		savePos := false
 
 		select {
 		case v := <-r.posCh:
@@ -111,7 +118,7 @@ func (r *River) syncPos() {
 				now := time.Now()
 				if v.force || now.Sub(lastSavedTime) > 3*time.Second {
 					lastSavedTime = now
-					needSavePos = true
+					savePos = true
 					pos = v.pos
 				}
 			}
@@ -120,7 +127,7 @@ func (r *River) syncPos() {
 			return
 		}
 
-		if needSavePos {
+		if savePos {
 			if err := r.master.Save(pos); err != nil {
 				log.Errorf("save position %s err %v, close", pos, err)
 				r.cancel()
@@ -130,10 +137,9 @@ func (r *River) syncPos() {
 	}
 }
 
-var maxRoutineNum = 10
+var maxRoutineNum = 1000
 
-func (r *River) txLoop() {
-	log.Infof("txLoop")
+func (r *River) RowLoop() {
 	defer r.wg.Done()
 
 	chHandler := make(chan int, maxRoutineNum)
@@ -176,29 +182,30 @@ func (r *River) SyncData(row [][]interface{}, chHandler chan int) (err error) {
 }
 
 func (r *River) DeleteSql(rows [][]interface{}) {
-	pv, _ := r.cEvent.Table.GetPKValues(rows[0])
-	pkLen := r.cEvent.Table.PKColumns
+	for i := 0; i < len(rows); i++ {
+		pv, _ := r.cEvent.Table.GetPKValues(rows[i])
+		pkLen := r.cEvent.Table.PKColumns
 
-	var where = ""
-	for i := 0; i < len(pkLen); i++ {
-		pk := r.cEvent.Table.GetPKColumn(i).Name
-		if where != "" {
-			where += " and "
+		var where = ""
+		for i := 0; i < len(pkLen); i++ {
+			pk := r.cEvent.Table.GetPKColumn(i).Name
+			if where != "" {
+				where += " and "
+			}
+
+			var r []interface{} = make([]interface{}, 1)
+			r[0] = pv[i]
+			s := ToStrings(r[0])
+			where += "`" + pk + "`" + "=" + "'" + s + "'"
 		}
 
-		var r []interface{} = make([]interface{}, 1)
-		r[0] = pv[i]
-		s := ToStrings(r[0])
-		where += "`" + pk + "`" + "=" + "'" + s + "'"
+		sql := "DELETE FROM " + r.c.DbName + "." + r.cEvent.Table.Name + " WHERE " + where
+		QuerySql(sql)
 	}
-
-	sql := "DELETE FROM " + r.c.DbName + "." + r.cEvent.Table.Name + " WHERE " + where
-	QuerySql(sql)
 }
 
 func (r *River) UpdateSql(rows [][]interface{}) {
 	pkValue, _ := r.cEvent.Table.GetPKValues(rows[1])
-
 	pkLen := r.cEvent.Table.PKColumns
 
 	var where = ""
@@ -254,35 +261,37 @@ func (r *River) UpdateSql(rows [][]interface{}) {
 }
 
 func (r *River) InsetSql(rows [][]interface{}) {
-	var fields = ""
-	var values = ""
-	for _, v := range r.cEvent.Table.Columns {
-		str, _ := r.cEvent.Table.GetColumnValue(v.Name, rows[0])
-		if fields != "" {
-			fields += ","
-		}
-
-		fields += "`" + v.Name + "`"
-		if values != "" {
-			values += ","
-		}
-
-		var s = ""
-		if str == nil {
-			s = "NULL"
-			values += s
-		} else {
-			if string(v.RawType) == "json" {
-				s = fmt.Sprintf("%s", str)
-			} else {
-				s = ToStrings(str)
+	for i := 0; i < len(rows); i++ {
+		var fields = ""
+		var values = ""
+		for _, v := range r.cEvent.Table.Columns {
+			str, _ := r.cEvent.Table.GetColumnValue(v.Name, rows[i])
+			if fields != "" {
+				fields += ","
 			}
-			values += "'" + s + "'"
-		}
-	}
 
-	sql := "INSERT INTO " + r.c.DbName + "." + r.cEvent.Table.Name + " (" + fields + ")" + " VALUES " + "(" + values + ")"
-	QuerySql(sql)
+			fields += "`" + v.Name + "`"
+			if values != "" {
+				values += ","
+			}
+
+			var s = ""
+			if str == nil {
+				s = "NULL"
+				values += s
+			} else {
+				if string(v.RawType) == "json" {
+					s = fmt.Sprintf("%s", str)
+				} else {
+					s = ToStrings(str)
+				}
+				values += "'" + s + "'"
+			}
+		}
+
+		sql := "INSERT INTO " + r.c.DbName + "." + r.cEvent.Table.Name + " (" + fields + ")" + " VALUES " + "(" + values + ")"
+		QuerySql(sql)
+	}
 }
 
 func QuerySql(sql string) {

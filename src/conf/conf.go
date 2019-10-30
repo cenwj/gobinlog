@@ -27,6 +27,7 @@ type C struct {
 	FlushBulkTime TomlDuration
 	DataDir       string
 	StatAddr      string
+	ServerID      uint32
 }
 
 type TomlDuration struct {

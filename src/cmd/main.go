@@ -41,7 +41,7 @@ func main() {
 	case n := <-s:
 		r.ShutdownCh <- n
 	case <-r.Ctx().Done():
-		log.Infof("ctx donw %v, closing", r.Ctx().Err())
+		log.Infof("ctx down %v, closing", r.Ctx().Err())
 	}
 
 	r.Close()
