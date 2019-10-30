@@ -32,7 +32,7 @@ func main() {
 	go func() {
 		err := r.Run()
 		if err != nil {
-			log.Error("Canal run Err:%v\n", err)
+			log.Errorf("Canal run Err:%v\n", err.Error())
 		}
 		done <- struct{}{}
 	}()

@@ -81,10 +81,6 @@ func (h *BinLogHandler) OnRow(e *canal.RowsEvent) error {
 
 func (h *BinLogHandler) OnTableChanged(schema string, table string) error { return nil }
 
-func (h *BinLogHandler) SyncedPosition() mysql.Position {
-	return h.r.master.Position()
-}
-
 func (h *BinLogHandler) String() string {
 	return "BinLogHandler"
 }
@@ -137,7 +133,7 @@ func (r *River) SyncPos() {
 	}
 }
 
-var maxRoutineNum = 1000
+var maxRoutineNum = 10
 
 func (r *River) RowLoop() {
 	defer r.wg.Done()
@@ -182,13 +178,14 @@ func (r *River) SyncData(row [][]interface{}, chHandler chan int) (err error) {
 }
 
 func (r *River) DeleteSql(rows [][]interface{}) {
+	var cEvent = r.cEvent
 	for i := 0; i < len(rows); i++ {
-		pv, _ := r.cEvent.Table.GetPKValues(rows[i])
-		pkLen := r.cEvent.Table.PKColumns
+		pv, _ := cEvent.Table.GetPKValues(rows[i])
+		pkLen := cEvent.Table.PKColumns
 
 		var where = ""
 		for i := 0; i < len(pkLen); i++ {
-			pk := r.cEvent.Table.GetPKColumn(i).Name
+			pk := cEvent.Table.GetPKColumn(i).Name
 			if where != "" {
 				where += " and "
 			}
@@ -199,73 +196,86 @@ func (r *River) DeleteSql(rows [][]interface{}) {
 			where += "`" + pk + "`" + "=" + "'" + s + "'"
 		}
 
-		sql := "DELETE FROM " + r.c.DbName + "." + r.cEvent.Table.Name + " WHERE " + where
+		sql := "DELETE FROM " + r.c.DbName + "." + cEvent.Table.Name + " WHERE " + where
 		QuerySql(sql)
 	}
 }
 
 func (r *River) UpdateSql(rows [][]interface{}) {
-	pkValue, _ := r.cEvent.Table.GetPKValues(rows[1])
-	pkLen := r.cEvent.Table.PKColumns
+	var cEvent = r.cEvent
+	var n = len(rows)
+	for i := 0; i < len(rows); i++ {
 
-	var where = ""
-	var mr = make(map[string]string)
-	var ret = make([]map[string]string, 0)
-	for i := 0; i < len(pkLen); i++ {
-		pk := r.cEvent.Table.GetPKColumn(i).Name
-		if where != "" {
-			where += " and "
-		}
-
-		var r []interface{} = make([]interface{}, 1)
-		r[0] = pkValue[i]
-		v := ToStrings(r[0])
-		mr[pk] = pk
-		ret = append(ret, mr)
-		where += "`" + pk + "`" + "=" + "'" + string(v) + "'"
-	}
-
-	var sets = ""
-	for _, v := range r.cEvent.Table.Columns {
-		_, ok := mr[v.Name]
-		if ok {
+		if i%2 != 0 {
 			continue
 		}
 
-		oldStr, _ := r.cEvent.Table.GetColumnValue(v.Name, rows[0])
-		str, _ := r.cEvent.Table.GetColumnValue(v.Name, rows[1])
-		if ToStrings(oldStr) == ToStrings(str) {
-			continue
+		if n == i+1 {
+			break
 		}
+		pkValue, _ := cEvent.Table.GetPKValues(rows[i+1])
+		pkLen := cEvent.Table.PKColumns
 
-		if sets != "" {
-			sets += ","
-		}
-
-		var s = ""
-		if str == nil {
-			s = "NULL"
-			sets += "`" + v.Name + "`" + "=" + s
-		} else {
-			if string(v.RawType) == "json" {
-				s = fmt.Sprintf("%s", str)
-			} else {
-				s = ToStrings(str)
+		var where = ""
+		var mr = make(map[string]string)
+		var ret = make([]map[string]string, 0)
+		for j := 0; j < len(pkLen); j++ {
+			pk := cEvent.Table.GetPKColumn(j).Name
+			if where != "" {
+				where += " and "
 			}
-			sets += "`" + v.Name + "`" + "=" + "'" + s + "'"
+
+			var r []interface{} = make([]interface{}, 1)
+			r[0] = pkValue[j]
+			v := ToStrings(r[0])
+			mr[pk] = pk
+			ret = append(ret, mr)
+			where += "`" + pk + "`" + "=" + "'" + string(v) + "'"
 		}
 
+		var sets = ""
+		for _, v := range cEvent.Table.Columns {
+			_, ok := mr[v.Name]
+			if ok {
+				continue
+			}
+
+			oldStr, _ := cEvent.Table.GetColumnValue(v.Name, rows[i])
+			str, _ := cEvent.Table.GetColumnValue(v.Name, rows[i+1])
+			if ToStrings(oldStr) == ToStrings(str) {
+				continue
+			}
+
+			if sets != "" {
+				sets += ","
+			}
+
+			var s = ""
+			if str == nil {
+				s = "NULL"
+				sets += "`" + v.Name + "`" + "=" + s
+			} else {
+				if string(v.RawType) == "json" {
+					s = fmt.Sprintf("%s", str)
+				} else {
+					s = ToStrings(str)
+				}
+				sets += "`" + v.Name + "`" + "=" + "'" + s + "'"
+			}
+
+		}
+		sql := "UPDATE " + r.c.DbName + "." + cEvent.Table.Name + " SET " + sets + " WHERE " + where
+		QuerySql(sql)
 	}
-	sql := "UPDATE " + r.c.DbName + "." + r.cEvent.Table.Name + " SET " + sets + " WHERE " + where
-	QuerySql(sql)
 }
 
 func (r *River) InsetSql(rows [][]interface{}) {
+	var cEvent = r.cEvent
 	for i := 0; i < len(rows); i++ {
 		var fields = ""
 		var values = ""
-		for _, v := range r.cEvent.Table.Columns {
-			str, _ := r.cEvent.Table.GetColumnValue(v.Name, rows[i])
+		for _, v := range cEvent.Table.Columns {
+			str, _ := cEvent.Table.GetColumnValue(v.Name, rows[i])
 			if fields != "" {
 				fields += ","
 			}
@@ -289,7 +299,7 @@ func (r *River) InsetSql(rows [][]interface{}) {
 			}
 		}
 
-		sql := "INSERT INTO " + r.c.DbName + "." + r.cEvent.Table.Name + " (" + fields + ")" + " VALUES " + "(" + values + ")"
+		sql := "INSERT INTO " + r.c.DbName + "." + cEvent.Table.Name + " (" + fields + ")" + " VALUES " + "(" + values + ")"
 		QuerySql(sql)
 	}
 }
