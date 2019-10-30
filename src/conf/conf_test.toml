@@ -5,8 +5,8 @@ dbUser = "root"
 dbPass = "123456"
 dbName = "test"
 dbType = "mysql"
-binlogDbs = ["t"]
-binlogTbs = {"t.t"="t","t.t"="t"}
+binlogDbs = ["tiger"]
+binlogTbs = {"tiger.copy"="t","tiger.trade_account"="t"}
 binlogDbHost = "127.0.0.1"
 binlogDbUser = "root"
 binlogDbPass = "123456"
