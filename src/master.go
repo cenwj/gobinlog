@@ -2,7 +2,6 @@ package src
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path"
 	"sync"
@@ -51,28 +50,8 @@ func loadMasterInfo(dataDir string) (*masterInfo, error) {
 	return &m, errors.Trace(err)
 }
 
-func GetNewestPos() (*masterInfo, error) {
-	var m masterInfo
-	r := new(River)
-	result, err := r.canal.Execute("SHOW MASTER STATUS")
-	if err != nil {
-		return nil, fmt.Errorf("show master status error - %s", err)
-	}
-
-	if result.Resultset.RowNumber() != 1 {
-		return nil, errors.New("select master info error")
-	}
-
-	binlogName, _ := result.GetStringByName(0, "File")
-	binlogPos, _ := result.GetIntByName(0, "Position")
-	m.Name = binlogName
-	m.Pos = uint32(binlogPos)
-	return &m, nil
-	//return &mysql.Position{binlogName, uint32(binlogPos)}, nil
-}
-
 func (m *masterInfo) Save(pos mysql.Position) error {
-	log.Infof("save table position %s", pos)
+	//log.Infof("save table position %s", pos)
 
 	m.Lock()
 	defer m.Unlock()

@@ -55,8 +55,6 @@ func (r *River) newCanal() error {
 	cfg.Dump.ExecutionPath = ""
 	cfg.ServerID = r.c.ServerID
 	cfg.Dump.DiscardErr = true
-	//cfg.SemiSyncEnabled = false
-	//cfg.Dump.SkipMasterData = false
 	var err error
 	r.canal, err = canal.NewCanal(cfg)
 	r.canal.SetEventHandler(&BinLogHandler{r: r})
@@ -69,7 +67,9 @@ func (r *River) Run() error {
 	go r.RowLoop()
 
 	pos := r.master.Position()
-	//err := r.canal.Run()
+	if pos.Name=="" || pos.Pos == 0 {
+		pos,_ = r.canal.GetMasterPos()
+	}
 	err := r.canal.RunFrom(pos)
 	if err != nil {
 		log.Errorf("run canal Err:%s\n ", err.Error())
