@@ -51,8 +51,6 @@ func loadMasterInfo(dataDir string) (*masterInfo, error) {
 }
 
 func (m *masterInfo) Save(pos mysql.Position) error {
-	//log.Infof("save table position %s", pos)
-
 	m.Lock()
 	defer m.Unlock()
 
@@ -76,7 +74,7 @@ func (m *masterInfo) Save(pos mysql.Position) error {
 
 	var err error
 	if err = ioutil2.WriteFileAtomic(m.filePath, buf.Bytes(), 0644); err != nil {
-		log.Error("save master file%s err %v", m.filePath, err)
+		log.Errorf("save master file%s err %v", m.filePath, err.Error())
 	}
 
 	return errors.Trace(err)

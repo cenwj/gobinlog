@@ -63,14 +63,11 @@ func (h *BinLogHandler) OnRow(e *canal.RowsEvent) error {
 
 	switch e.Action {
 	case canal.UpdateAction:
-		h.r.syncCh <- e.Rows
-		h.r.cEvent = e
+		h.r.updateCh <- e
 	case canal.InsertAction:
-		h.r.syncCh <- e.Rows
-		h.r.cEvent = e
+		h.r.insertCh <- e
 	case canal.DeleteAction:
-		h.r.syncCh <- e.Rows
-		h.r.cEvent = e
+		h.r.deleteCh <- e
 	default:
 		return nil
 	}
@@ -142,50 +139,59 @@ func (r *River) RowLoop() {
 
 	for {
 		select {
-		case v := <-r.syncCh:
+		case v := <-r.deleteCh:
 			chHandler <- 1
-			go r.SyncData(v, chHandler)
+			go r.DeleteSql(v, chHandler)
+		case v := <-r.updateCh:
+			chHandler <- 1
+			go r.UpdateSql(v, chHandler)
+		case v := <-r.insertCh:
+			chHandler <- 1
+			go r.InsetSql(v, chHandler)
 		case <-r.ShutdownCh:
-			l := len(r.syncCh)
-			log.Infof("receive shutdown signal , closing, remain %d to write", l)
-			if len(r.syncCh) > 0 {
-				for i := 0; i < l; i++ {
-					v := <-r.syncCh
+			d := len(r.deleteCh)
+			log.Infof("receive shutdown signal closing, ch %d to write deleteCh", d)
+			if d > 0 {
+				for i := 0; i < d; i++ {
+					v := <-r.deleteCh
 					chHandler <- 1
-					go r.SyncData(v, chHandler)
+					go r.DeleteSql(v, chHandler)
 				}
 			}
+
+
+			in := len(r.insertCh)
+			log.Infof("receive shutdown signal closing, ch %d to write insertCh", in)
+			if in > 0 {
+				for i := 0; i < in; i++ {
+					v := <-r.insertCh
+					chHandler <- 1
+					go r.InsetSql(v, chHandler)
+				}
+			}
+			u := len(r.updateCh)
+			log.Infof("receive shutdown signal closing, ch %d to write updateCh", u)
+			if u > 0 {
+				for i := 0; i < u; i++ {
+					v := <-r.updateCh
+					chHandler <- 1
+					go r.UpdateSql(v, chHandler)
+				}
+			}
+
 			return
 		}
 	}
 }
 
-func (r *River) SyncData(row [][]interface{}, chHandler chan int) (err error) {
-	switch r.cEvent.Action {
-	case canal.UpdateAction:
-		r.UpdateSql(row)
-	case canal.InsertAction:
-		r.InsetSql(row)
-	case canal.DeleteAction:
-		r.DeleteSql(row)
-	default:
-		return nil
-	}
-
-	<-chHandler
-
-	return
-}
-
-func (r *River) DeleteSql(rows [][]interface{}) {
-	var cEvent = r.cEvent
-	for i := 0; i < len(rows); i++ {
-		pv, _ := cEvent.Table.GetPKValues(rows[i])
-		pkLen := cEvent.Table.PKColumns
+func (r *River) DeleteSql(e *canal.RowsEvent, chHandler chan int) {
+	for i := 0; i < len(e.Rows); i++ {
+		pv, _ := e.Table.GetPKValues(e.Rows[i])
+		pkLen := e.Table.PKColumns
 
 		var where = ""
 		for i := 0; i < len(pkLen); i++ {
-			pk := cEvent.Table.GetPKColumn(i).Name
+			pk := e.Table.GetPKColumn(i).Name
 			if where != "" {
 				where += " and "
 			}
@@ -196,15 +202,16 @@ func (r *River) DeleteSql(rows [][]interface{}) {
 			where += "`" + pk + "`" + "=" + "'" + s + "'"
 		}
 
-		sql := "DELETE FROM " + r.c.DbName + "." + cEvent.Table.Name + " WHERE " + where
+		sql := "DELETE FROM " + r.c.DbName + "." + e.Table.Name + " WHERE " + where
 		QuerySql(sql)
 	}
+
+	<-chHandler
 }
 
-func (r *River) UpdateSql(rows [][]interface{}) {
-	var cEvent = r.cEvent
-	var n = len(rows)
-	for i := 0; i < len(rows); i++ {
+func (r *River) UpdateSql(e *canal.RowsEvent, chHandler chan int) {
+	var n = len(e.Rows)
+	for i := 0; i < len(e.Rows); i++ {
 
 		if i%2 != 0 {
 			continue
@@ -213,14 +220,14 @@ func (r *River) UpdateSql(rows [][]interface{}) {
 		if n == i+1 {
 			break
 		}
-		pkValue, _ := cEvent.Table.GetPKValues(rows[i+1])
-		pkLen := cEvent.Table.PKColumns
+		pkValue, _ := e.Table.GetPKValues(e.Rows[i+1])
+		pkLen := e.Table.PKColumns
 
 		var where = ""
 		var mr = make(map[string]string)
 		var ret = make([]map[string]string, 0)
 		for j := 0; j < len(pkLen); j++ {
-			pk := cEvent.Table.GetPKColumn(j).Name
+			pk := e.Table.GetPKColumn(j).Name
 			if where != "" {
 				where += " and "
 			}
@@ -234,14 +241,14 @@ func (r *River) UpdateSql(rows [][]interface{}) {
 		}
 
 		var sets = ""
-		for _, v := range cEvent.Table.Columns {
+		for _, v := range e.Table.Columns {
 			_, ok := mr[v.Name]
 			if ok {
 				continue
 			}
 
-			oldStr, _ := cEvent.Table.GetColumnValue(v.Name, rows[i])
-			str, _ := cEvent.Table.GetColumnValue(v.Name, rows[i+1])
+			oldStr, _ := e.Table.GetColumnValue(v.Name, e.Rows[i])
+			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i+1])
 			if ToStrings(oldStr) == ToStrings(str) {
 				continue
 			}
@@ -264,18 +271,18 @@ func (r *River) UpdateSql(rows [][]interface{}) {
 			}
 
 		}
-		sql := "UPDATE " + r.c.DbName + "." + cEvent.Table.Name + " SET " + sets + " WHERE " + where
+		sql := "UPDATE " + r.c.DbName + "." + e.Table.Name + " SET " + sets + " WHERE " + where
 		QuerySql(sql)
 	}
+	<-chHandler
 }
 
-func (r *River) InsetSql(rows [][]interface{}) {
-	var cEvent = r.cEvent
-	for i := 0; i < len(rows); i++ {
+func (r *River) InsetSql(e *canal.RowsEvent, chHandler chan int) {
+	for i := 0; i < len(e.Rows); i++ {
 		var fields = ""
 		var values = ""
-		for _, v := range cEvent.Table.Columns {
-			str, _ := cEvent.Table.GetColumnValue(v.Name, rows[i])
+		for _, v := range e.Table.Columns {
+			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i])
 			if fields != "" {
 				fields += ","
 			}
@@ -299,9 +306,10 @@ func (r *River) InsetSql(rows [][]interface{}) {
 			}
 		}
 
-		sql := "INSERT INTO " + r.c.DbName + "." + cEvent.Table.Name + " (" + fields + ")" + " VALUES " + "(" + values + ")"
+		sql := "INSERT INTO " + r.c.DbName + "." + e.Table.Name + " (" + fields + ")" + " VALUES " + "(" + values + ")"
 		QuerySql(sql)
 	}
+	<-chHandler
 }
 
 func QuerySql(sql string) {
