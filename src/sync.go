@@ -70,10 +70,7 @@ func (h *BinLogHandler) OnRow(e *canal.RowsEvent) error {
 	return nil
 }
 
-func (h *BinLogHandler) OnTableChanged(schema string, table string) error {
-	log.Info("OnTableChanged")
-	return nil
-}
+func (h *BinLogHandler) OnTableChanged(schema string, table string) error { return nil }
 
 func (h *BinLogHandler) String() string {
 	return "BinLogHandler"
