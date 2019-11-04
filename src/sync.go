@@ -60,23 +60,20 @@ func (h *BinLogHandler) OnRow(e *canal.RowsEvent) error {
 	}
 
 	var res []byte
-
-	switch e.Action {
-	case canal.UpdateAction:
-		h.r.updateCh <- e
-	case canal.InsertAction:
-		h.r.insertCh <- e
-	case canal.DeleteAction:
-		h.r.deleteCh <- e
-	default:
+	if e.Action == canal.InsertAction || e.Action == canal.UpdateAction || e.Action == canal.DeleteAction {
+		h.r.syncCh <- e
+	} else {
 		return nil
 	}
-
 	h.r.posCh <- res
+
 	return nil
 }
 
-func (h *BinLogHandler) OnTableChanged(schema string, table string) error { return nil }
+func (h *BinLogHandler) OnTableChanged(schema string, table string) error {
+	log.Info("OnTableChanged")
+	return nil
+}
 
 func (h *BinLogHandler) String() string {
 	return "BinLogHandler"
@@ -103,7 +100,6 @@ func (r *River) SyncPos() {
 
 	for {
 		savePos := false
-
 		select {
 		case v := <-r.posCh:
 			switch v := v.(type) {
@@ -115,7 +111,6 @@ func (r *River) SyncPos() {
 					pos = v.pos
 				}
 			}
-
 		case <-r.ctx.Done():
 			return
 		}
@@ -136,51 +131,36 @@ func (r *River) RowLoop() {
 	defer r.wg.Done()
 
 	chHandler := make(chan int, maxRoutineNum)
-
 	for {
 		select {
-		case v := <-r.deleteCh:
+		case v := <-r.syncCh:
 			chHandler <- 1
-			go r.DeleteSql(v, chHandler)
-		case v := <-r.updateCh:
-			chHandler <- 1
-			go r.UpdateSql(v, chHandler)
-		case v := <-r.insertCh:
-			chHandler <- 1
-			go r.InsetSql(v, chHandler)
+			go r.SyncData(v, chHandler)
 		case <-r.ShutdownCh:
-			d := len(r.deleteCh)
-			log.Infof("receive shutdown signal closing, ch %d to write deleteCh", d)
-			if d > 0 {
-				for i := 0; i < d; i++ {
-					v := <-r.deleteCh
+			chLen := len(r.syncCh)
+			log.Infof("receive shutdown signal closing, ch %d to write syncCh", chLen)
+			if chLen > 0 {
+				for i := 0; i < chLen; i++ {
+					v := <-r.syncCh
 					chHandler <- 1
-					go r.DeleteSql(v, chHandler)
+					go r.SyncData(v, chHandler)
 				}
 			}
-
-
-			in := len(r.insertCh)
-			log.Infof("receive shutdown signal closing, ch %d to write insertCh", in)
-			if in > 0 {
-				for i := 0; i < in; i++ {
-					v := <-r.insertCh
-					chHandler <- 1
-					go r.InsetSql(v, chHandler)
-				}
-			}
-			u := len(r.updateCh)
-			log.Infof("receive shutdown signal closing, ch %d to write updateCh", u)
-			if u > 0 {
-				for i := 0; i < u; i++ {
-					v := <-r.updateCh
-					chHandler <- 1
-					go r.UpdateSql(v, chHandler)
-				}
-			}
-
 			return
 		}
+	}
+}
+
+func (r *River) SyncData(v *canal.RowsEvent, chHandler chan int) {
+	switch v.Action {
+	case "update":
+		r.UpdateSql(v, chHandler)
+	case "insert":
+		r.InsetSql(v, chHandler)
+	case "delete":
+		r.DeleteSql(v, chHandler)
+	default:
+		log.Fatal("table action err")
 	}
 }
 

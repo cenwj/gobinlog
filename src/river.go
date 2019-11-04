@@ -10,11 +10,9 @@ import (
 )
 
 type River struct {
-	canal *canal.Canal
+	canal      *canal.Canal
 	c          *conf.C
-	deleteCh   chan *canal.RowsEvent
-	insertCh   chan *canal.RowsEvent
-	updateCh   chan *canal.RowsEvent
+	syncCh     chan *canal.RowsEvent
 	posCh      chan interface{}
 	ctx        context.Context
 	wg         sync.WaitGroup
@@ -26,9 +24,7 @@ type River struct {
 func InitRiver(c *conf.C) (*River, error) {
 	r := new(River)
 	r.c = c
-	r.deleteCh = make(chan *canal.RowsEvent, 100)
-	r.insertCh = make(chan *canal.RowsEvent, 100)
-	r.updateCh = make(chan *canal.RowsEvent, 100)
+	r.syncCh = make(chan *canal.RowsEvent, 100)
 	r.posCh = make(chan interface{}, 100)
 	r.ShutdownCh = make(chan interface{}, 1)
 	r.ctx, r.cancel = context.WithCancel(context.Background())
@@ -90,5 +86,5 @@ func (r *River) Close() {
 	r.canal.Close()
 	r.master.Close()
 	r.wg.Wait()
-	log.Infof("closed river")
+	log.Infof("Closed River")
 }
