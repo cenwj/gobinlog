@@ -132,7 +132,11 @@ func (r *River) RowLoop() {
 		select {
 		case v := <-r.syncCh:
 			chHandler <- 1
-			go r.SyncData(v, chHandler)
+			if v.Table.Schema == r.c.SyncGroupDbName && v.Table.Name == r.c.SyncGroupTbName {
+				go r.SyncGroupData(v, chHandler)
+			} else {
+				go r.SyncData(v, chHandler)
+			}
 		case <-r.ShutdownCh:
 			chLen := len(r.syncCh)
 			log.Infof("receive shutdown signal closing, ch %d to write syncCh", chLen)
@@ -145,6 +149,17 @@ func (r *River) RowLoop() {
 			}
 			return
 		}
+	}
+}
+
+func (r *River) SyncGroupData(v *canal.RowsEvent, chHandler chan int) {
+	switch v.Action {
+	case "update":
+		r.UpdateGroupSql(v, chHandler)
+	case "insert":
+		r.InsetGroupSql(v, chHandler)
+	default:
+		log.Info("group table action not in update,insert")
 	}
 }
 
@@ -183,6 +198,64 @@ func (r *River) DeleteSql(e *canal.RowsEvent, chHandler chan int) {
 		QuerySql(sql)
 	}
 
+	<-chHandler
+}
+
+func (r *River) UpdateGroupSql(e *canal.RowsEvent, chHandler chan int) {
+	var n = len(e.Rows)
+	for i := 0; i < len(e.Rows); i++ {
+
+		if i%2 != 0 {
+			continue
+		}
+
+		if n == i+1 {
+			break
+		}
+
+		pkValue, _ := e.Table.GetPKValues(e.Rows[i+1])
+
+		var where = ""
+		if len(pkValue) == 1 {
+			where += "`trade_account_id`" + "=" + ToStrings(pkValue[0])
+		}
+
+		var sets = ""
+		for _, v := range e.Table.Columns {
+			if v.Name != "GROUP" {
+				continue
+			}
+			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i+1])
+			s := ToStrings(str)
+			sets += "`" + "group" + "`" + "=" + "'" + s + "'"
+		}
+		sql := "UPDATE " + r.c.DbGroupName + "." + r.c.GroupTbName + " SET " + sets + " WHERE " + where
+		QueryGroupSql(sql)
+	}
+	<-chHandler
+}
+
+func (r *River) InsetGroupSql(e *canal.RowsEvent, chHandler chan int) {
+	for i := 0; i < len(e.Rows); i++ {
+		var sets = ""
+		var where = ""
+		pkValue, _ := e.Table.GetPKValues(e.Rows[i])
+		if len(pkValue) == 1 {
+			where += "`trade_account_id`" + "=" + ToStrings(pkValue[0])
+		}
+		for _, v := range e.Table.Columns {
+			if v.Name != "GROUP" {
+				continue
+			}
+
+			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i])
+			s := ToStrings(str)
+			sets += "`" + "group" + "`" + "=" + "'" + s + "'"
+		}
+
+		sql := "UPDATE " + r.c.DbGroupName + "." + r.c.GroupTbName + " SET " + sets + " WHERE " + where
+		QueryGroupSql(sql)
+	}
 	<-chHandler
 }
 
@@ -287,6 +360,18 @@ func (r *River) InsetSql(e *canal.RowsEvent, chHandler chan int) {
 		QuerySql(sql)
 	}
 	<-chHandler
+}
+
+func QueryGroupSql(sql string) {
+	q := db.Group()
+	r, err := q.Exec(sql)
+	if err == nil {
+		res, _ := r.RowsAffected()
+		log.Infof("QueryGroupSql Succ:%s, res:%d\n", sql, res)
+	} else {
+		log.Infof("QueryGroupSql Fail:%s, res:%d\n", sql, 0)
+	}
+	q.Close()
 }
 
 func QuerySql(sql string) {

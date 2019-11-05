@@ -12,22 +12,31 @@ type tomlConfig struct {
 }
 
 type C struct {
-	DbHost        string
-	DbPort        string
-	DbUser        string
-	DbPass        string
-	DbName        string
-	DbType        string
-	BinlogDbHost  string
-	BinlogDbUser  string
-	BinlogDbPass  string
-	BinlogTbs     map[string]string
-	BinlogDbs     []string
-	BulkSize      int
-	FlushBulkTime TomlDuration
-	DataDir       string
-	StatAddr      string
-	ServerID      uint32
+	DbHost          string
+	DbPort          string
+	DbUser          string
+	DbPass          string
+	DbName          string
+	DbType          string
+	DbGroupHost     string
+	DbGroupPort     string
+	DbGroupUser     string
+	DbGroupPass     string
+	DbGroupName     string
+	DbGroupType     string
+	GroupTbName     string
+	SyncGroupTbName string
+	SyncGroupDbName string
+	BinlogDbHost    string
+	BinlogDbUser    string
+	BinlogDbPass    string
+	BinlogTbs       map[string]string
+	BinlogDbs       []string
+	BulkSize        int
+	FlushBulkTime   TomlDuration
+	DataDir         string
+	StatAddr        string
+	ServerID        uint32
 }
 
 type TomlDuration struct {

@@ -25,3 +25,19 @@ func Init() *sql.DB {
 	}
 	return db
 }
+
+func Group() * sql.DB  {
+	confStr := fmt.Sprintf(
+		"%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=True&loc=Local",
+		conf.Conf().C.DbGroupUser,
+		conf.Conf().C.DbGroupPass,
+		conf.Conf().C.DbGroupHost,
+		conf.Conf().C.DbGroupPort,
+		conf.Conf().C.DbGroupName)
+	db, err := sql.Open("mysql", confStr)
+
+	if err != nil {
+		log.Fatalln("db:" + err.Error())
+	}
+	return db
+}
