@@ -11,9 +11,9 @@ dbGroupUser = "root"
 dbGroupPass = "123456"
 dbGroupName = "test"
 dbGroupType = "mysql"
-groupTbName = ""
-syncGroupTbName = ""
-syncGroupDbName = ""
+groupTbName = "t"
+syncGroupTbName = "t"
+syncGroupDbName = "t"
 binlogDbs = ["test"]
 binlogTbs = {"test.t"="t","t.t"=""}
 binlogDbHost = "127.0.0.1"

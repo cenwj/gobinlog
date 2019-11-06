@@ -7,6 +7,7 @@ import (
 	"github.com/siddontang/go-mysql/mysql"
 	"github.com/siddontang/go-mysql/replication"
 	"gobinlog/src/db"
+	"strings"
 	"time"
 )
 
@@ -54,7 +55,7 @@ func (h *BinLogHandler) OnRow(e *canal.RowsEvent) error {
 
 	var mapTB = h.r.c.BinlogTbs
 	var fTb = e.Table.Schema + "." + e.Table.Name
-	_, ok := mapTB[fTb]
+	_, ok := mapTB[strings.ToLower(fTb)]
 	if !ok {
 		return nil
 	}
@@ -132,7 +133,7 @@ func (r *River) RowLoop() {
 		select {
 		case v := <-r.syncCh:
 			chHandler <- 1
-			if v.Table.Schema == r.c.SyncGroupDbName && v.Table.Name == r.c.SyncGroupTbName {
+			if strings.ToLower(v.Table.Schema) == r.c.SyncGroupDbName && strings.ToLower(v.Table.Name) == r.c.SyncGroupTbName {
 				go r.SyncGroupData(v, chHandler)
 			} else {
 				go r.SyncData(v, chHandler)
@@ -144,9 +145,14 @@ func (r *River) RowLoop() {
 				for i := 0; i < chLen; i++ {
 					v := <-r.syncCh
 					chHandler <- 1
-					go r.SyncData(v, chHandler)
+					if strings.ToLower(v.Table.Schema) == r.c.SyncGroupDbName && strings.ToLower(v.Table.Name) == r.c.SyncGroupTbName {
+						go r.SyncGroupData(v, chHandler)
+					} else {
+						go r.SyncData(v, chHandler)
+					}
 				}
 			}
+
 			return
 		}
 	}
@@ -222,15 +228,21 @@ func (r *River) UpdateGroupSql(e *canal.RowsEvent, chHandler chan int) {
 
 		var sets = ""
 		for _, v := range e.Table.Columns {
-			if v.Name != "GROUP" {
+			if strings.ToUpper(v.Name) != "GROUP" {
 				continue
 			}
+			oldStr, _ := e.Table.GetColumnValue(v.Name, e.Rows[i])
 			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i+1])
+			if ToStrings(oldStr) == ToStrings(str) {
+				continue
+			}
 			s := ToStrings(str)
 			sets += "`" + "group" + "`" + "=" + "'" + s + "'"
 		}
-		sql := "UPDATE " + r.c.DbGroupName + "." + r.c.GroupTbName + " SET " + sets + " WHERE " + where
-		QueryGroupSql(sql)
+		if sets != "" && where != "" {
+			sql := "UPDATE " + r.c.DbGroupName + "." + r.c.GroupTbName + " SET " + sets + " WHERE " + where
+			QueryGroupSql(sql)
+		}
 	}
 	<-chHandler
 }
@@ -244,7 +256,7 @@ func (r *River) InsetGroupSql(e *canal.RowsEvent, chHandler chan int) {
 			where += "`trade_account_id`" + "=" + ToStrings(pkValue[0])
 		}
 		for _, v := range e.Table.Columns {
-			if v.Name != "GROUP" {
+			if strings.ToUpper(v.Name) != "GROUP" {
 				continue
 			}
 
@@ -252,9 +264,10 @@ func (r *River) InsetGroupSql(e *canal.RowsEvent, chHandler chan int) {
 			s := ToStrings(str)
 			sets += "`" + "group" + "`" + "=" + "'" + s + "'"
 		}
-
-		sql := "UPDATE " + r.c.DbGroupName + "." + r.c.GroupTbName + " SET " + sets + " WHERE " + where
-		QueryGroupSql(sql)
+		if sets != "" && where != ""{
+			sql := "UPDATE " + r.c.DbGroupName + "." + r.c.GroupTbName + " SET " + sets + " WHERE " + where
+			QueryGroupSql(sql)
+		}
 	}
 	<-chHandler
 }
