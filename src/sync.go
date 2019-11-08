@@ -188,15 +188,12 @@ func (r *River) DeleteSql(e *canal.RowsEvent, chHandler chan int) {
 		pkLen := e.Table.PKColumns
 
 		var where = ""
-		for i := 0; i < len(pkLen); i++ {
-			pk := e.Table.GetPKColumn(i).Name
+		for j := 0; j < len(pkLen); j++ {
+			pk := e.Table.GetPKColumn(j).Name
 			if where != "" {
 				where += " and "
 			}
-
-			var r []interface{} = make([]interface{}, 1)
-			r[0] = pv[i]
-			s := ToStrings(r[0])
+			s := ToStrings(pv[j])
 			where += "`" + pk + "`" + "=" + "'" + s + "'"
 		}
 
@@ -210,7 +207,6 @@ func (r *River) DeleteSql(e *canal.RowsEvent, chHandler chan int) {
 func (r *River) UpdateGroupSql(e *canal.RowsEvent, chHandler chan int) {
 	var n = len(e.Rows)
 	for i := 0; i < len(e.Rows); i++ {
-
 		if i%2 != 0 {
 			continue
 		}
@@ -220,7 +216,6 @@ func (r *River) UpdateGroupSql(e *canal.RowsEvent, chHandler chan int) {
 		}
 
 		pkValue, _ := e.Table.GetPKValues(e.Rows[i+1])
-
 		var where = ""
 		if len(pkValue) == 1 {
 			where += "`trade_account_id`" + "=" + ToStrings(pkValue[0])
@@ -231,14 +226,17 @@ func (r *River) UpdateGroupSql(e *canal.RowsEvent, chHandler chan int) {
 			if strings.ToUpper(v.Name) != "GROUP" {
 				continue
 			}
+
 			oldStr, _ := e.Table.GetColumnValue(v.Name, e.Rows[i])
 			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i+1])
 			if ToStrings(oldStr) == ToStrings(str) {
 				continue
 			}
+
 			s := ToStrings(str)
 			sets += "`" + "group" + "`" + "=" + "'" + s + "'"
 		}
+
 		if sets != "" && where != "" {
 			sql := "UPDATE " + r.c.DbGroupName + "." + r.c.GroupTbName + " SET " + sets + " WHERE " + where
 			QueryGroupSql(sql)
@@ -251,20 +249,31 @@ func (r *River) InsetGroupSql(e *canal.RowsEvent, chHandler chan int) {
 	for i := 0; i < len(e.Rows); i++ {
 		var sets = ""
 		var where = ""
-		pkValue, _ := e.Table.GetPKValues(e.Rows[i])
+		pkValue, err := e.Table.GetPKValues(e.Rows[i])
+		if err != nil {
+			log.Errorf("InsetGroupSql GetPKValues rows:%v, err:%s\n", e.Rows, err.Error())
+			break
+		}
+
 		if len(pkValue) == 1 {
 			where += "`trade_account_id`" + "=" + ToStrings(pkValue[0])
 		}
+
 		for _, v := range e.Table.Columns {
 			if strings.ToUpper(v.Name) != "GROUP" {
 				continue
 			}
 
-			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i])
+			str, err := e.Table.GetColumnValue(v.Name, e.Rows[i])
+			if err != nil {
+				log.Errorf("InsetGroupSql GetColumnValue rows:%v, err:%s\n", e.Rows, err.Error())
+				break
+			}
+
 			s := ToStrings(str)
 			sets += "`" + "group" + "`" + "=" + "'" + s + "'"
 		}
-		if sets != "" && where != ""{
+		if sets != "" && where != "" {
 			sql := "UPDATE " + r.c.DbGroupName + "." + r.c.GroupTbName + " SET " + sets + " WHERE " + where
 			QueryGroupSql(sql)
 		}
@@ -275,7 +284,6 @@ func (r *River) InsetGroupSql(e *canal.RowsEvent, chHandler chan int) {
 func (r *River) UpdateSql(e *canal.RowsEvent, chHandler chan int) {
 	var n = len(e.Rows)
 	for i := 0; i < len(e.Rows); i++ {
-
 		if i%2 != 0 {
 			continue
 		}
@@ -283,7 +291,13 @@ func (r *River) UpdateSql(e *canal.RowsEvent, chHandler chan int) {
 		if n == i+1 {
 			break
 		}
-		pkValue, _ := e.Table.GetPKValues(e.Rows[i+1])
+
+		pkValue, err := e.Table.GetPKValues(e.Rows[i+1])
+		if err != nil {
+			log.Errorf("UpdateSql GetPKValues rows:%v, err %s\n", e.Rows, err.Error())
+			continue
+		}
+
 		pkLen := e.Table.PKColumns
 
 		var where = ""
@@ -295,12 +309,10 @@ func (r *River) UpdateSql(e *canal.RowsEvent, chHandler chan int) {
 				where += " and "
 			}
 
-			var r []interface{} = make([]interface{}, 1)
-			r[0] = pkValue[j]
-			v := ToStrings(r[0])
+			v := ToStrings(pkValue[j])
 			mr[pk] = pk
 			ret = append(ret, mr)
-			where += "`" + pk + "`" + "=" + "'" + string(v) + "'"
+			where += "`" + pk + "`" + "=" + "'" + v + "'"
 		}
 
 		var sets = ""
@@ -309,9 +321,14 @@ func (r *River) UpdateSql(e *canal.RowsEvent, chHandler chan int) {
 			if ok {
 				continue
 			}
+			var err error
+			oldStr, err := e.Table.GetColumnValue(v.Name, e.Rows[i])
+			str, err := e.Table.GetColumnValue(v.Name, e.Rows[i+1])
+			if err != nil {
+				log.Errorf("UpdateSql GetColumnValue rows:%v, err %s\n", e.Rows, err.Error())
+				continue
+			}
 
-			oldStr, _ := e.Table.GetColumnValue(v.Name, e.Rows[i])
-			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i+1])
 			if ToStrings(oldStr) == ToStrings(str) {
 				continue
 			}
@@ -325,14 +342,13 @@ func (r *River) UpdateSql(e *canal.RowsEvent, chHandler chan int) {
 				s = "NULL"
 				sets += "`" + v.Name + "`" + "=" + s
 			} else {
-				if string(v.RawType) == "json" {
+				if v.RawType == "json" {
 					s = fmt.Sprintf("%s", str)
 				} else {
 					s = ToStrings(str)
 				}
 				sets += "`" + v.Name + "`" + "=" + "'" + s + "'"
 			}
-
 		}
 		sql := "UPDATE " + r.c.DbName + "." + e.Table.Name + " SET " + sets + " WHERE " + where
 		QuerySql(sql)
@@ -345,7 +361,12 @@ func (r *River) InsetSql(e *canal.RowsEvent, chHandler chan int) {
 		var fields = ""
 		var values = ""
 		for _, v := range e.Table.Columns {
-			str, _ := e.Table.GetColumnValue(v.Name, e.Rows[i])
+			str, err := e.Table.GetColumnValue(v.Name, e.Rows[i])
+			if err != nil {
+				log.Errorf("InsetSql GetColumnValue rows:%v, err:%s\n", e.Rows, err.Error())
+				continue
+			}
+
 			if fields != "" {
 				fields += ","
 			}
@@ -360,7 +381,7 @@ func (r *River) InsetSql(e *canal.RowsEvent, chHandler chan int) {
 				s = "NULL"
 				values += s
 			} else {
-				if string(v.RawType) == "json" {
+				if v.RawType == "json" {
 					s = fmt.Sprintf("%s", str)
 				} else {
 					s = ToStrings(str)
